@@ -248,24 +248,78 @@ python train_prosign_generation.py \
 
 This reports generation metrics such as `BLEU-4`, `ROUGE-1`, `ROUGE-2`, and `ROUGE-L`.
 
-### Fixed multi-country evaluation suites
+## Reproducing Paper Results
 
-The repository also includes evaluation scripts with a predefined test-country suite:
+The ProSign benchmark trains on 35 country-language entries and evaluates on 7 unseen countries. Both `--country_train` and `--country_test` accept multiple entries, for example `--country_train "China (Chinese)" "USA (English)"`. Folder names must match the country directories under `PROSIGN_DATASET_PATH`.
 
-```bash
-python train_prosign_pretrain_eval.py \
-  --country_train "China (Chinese)" \
-  --country_test "USA (English)" \
-  --resume outputs/prosign_pretrain_china_to_usa/best_checkpoint.pth \
-  --output_dir outputs/prosign_pretrain_suite
-```
+Define the benchmark split once:
 
 ```bash
-python train_mmlp_keypoints_t5_eval.py \
-  --country_train "China (Chinese)" \
-  --resume outputs/prosign_pretrain_china_to_usa/best_checkpoint.pth \
-  --output_dir outputs/mmlp_suite
+TRAIN_COUNTRIES=(
+  "USA (English)" "China (Chinese)" "Germany (German)" "Japan (Japanese)"
+  "India (Hindi)" "UK (English)" "France (French)" "Italy (Italian)"
+  "Russia (Russian)" "Brazil (Portuguese)" "Spain (Spanish)" "Mexico (Spanish)"
+  "South Korea (Korean)" "Turkey (Turkish)" "Poland (Polish)" "Sweden (Swedish)"
+  "Argentina (Spanish)" "Vietnam (Vietnamese)" "Denmark (Danish)" "Finland (Finnish)"
+  "Portugal (Portuguese)" "Romania (Romanian)" "Czech Republic (Czech)" "Pakistan (Urdu)"
+  "Greece (Greek)" "Ukraine (Ukrainian)" "Bulgaria (Bulgarian)" "Chile (Spanish)"
+  "Slovakia (Slovak)" "Kenya (English)" "Belarus (Russian)" "Belarus (Belarusian)"
+  "Serbia (Serbian)" "Lithuania (Lithuanian)" "International (International Signs)"
+)
+TEST_COUNTRIES=(
+  "Croatia (Croatian)" "Cuba (Spanish)" "Cyprus (Greek)" "Estonia (Estonian)"
+  "Iceland (Icelandic)" "Latvia (Latvian)" "Syria (Arabic)"
+)
 ```
+
+### 1. Alignment pretraining (paper setting: 50 epochs, batch size 24)
+
+```bash
+torchrun --nproc_per_node=8 train_prosign_pretrain.py \
+  --country_train "${TRAIN_COUNTRIES[@]}" \
+  --country_test "${TEST_COUNTRIES[@]}" \
+  --batch-size 24 \
+  --epochs 50 \
+  --output_dir outputs/prosign_pretrain_benchmark
+```
+
+### 2. Zero-shot recognition evaluation (Table 2)
+
+```bash
+python train_prosign_pretrain.py \
+  --eval \
+  --country_train "${TRAIN_COUNTRIES[@]}" \
+  --country_test "${TEST_COUNTRIES[@]}" \
+  --resume outputs/prosign_pretrain_benchmark/best_checkpoint.pth \
+  --output_dir outputs/prosign_pretrain_benchmark_eval
+```
+
+This reports `Top1`, `Top5`, and `Top10` for each unseen test country.
+
+### 3. Pronunciation generation training (paper setting: 30 epochs, batch size 2)
+
+```bash
+torchrun --nproc_per_node=8 train_prosign_generation.py \
+  --country_train "${TRAIN_COUNTRIES[@]}" \
+  --country_test "${TEST_COUNTRIES[@]}" \
+  --batch-size 2 \
+  --epochs 30 \
+  --finetune outputs/prosign_pretrain_benchmark/best_checkpoint.pth \
+  --output_dir outputs/prosign_generation_benchmark
+```
+
+### 4. Pronunciation generation evaluation (Table 3)
+
+```bash
+python train_prosign_generation.py \
+  --eval \
+  --country_train "${TRAIN_COUNTRIES[@]}" \
+  --country_test "${TEST_COUNTRIES[@]}" \
+  --resume outputs/prosign_generation_benchmark/best_checkpoint.pth \
+  --output_dir outputs/prosign_generation_benchmark_eval
+```
+
+This reports `BLEU-4` and `ROUGE-1/2/L` for each unseen test country.
 
 ## Inference
 
