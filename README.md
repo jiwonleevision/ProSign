@@ -250,7 +250,7 @@ This reports generation metrics such as `BLEU-4`, `ROUGE-1`, `ROUGE-2`, and `ROU
 
 ## Reproducing Paper Results
 
-The ProSign benchmark trains on 35 country-language entries and evaluates on 7 unseen countries. Both `--country_train` and `--country_test` accept multiple entries, for example `--country_train "China (Chinese)" "USA (English)"`. Folder names must match the country directories under `PROSIGN_DATASET_PATH`.
+The ProSign benchmark trains on 35 country-language entries and evaluates on 7 unseen countries. `--country_train` accepts multiple entries, for example `--country_train "China (Chinese)" "USA (English)"`, while `--country_test` takes a single country per run. Folder names must match the country directories under `PROSIGN_DATASET_PATH`. All commands below also require `--config`; a minimal example is provided at `configs/prosign.yaml`.
 
 Define the benchmark split once:
 
@@ -274,52 +274,64 @@ TEST_COUNTRIES=(
 
 ### 1. Alignment pretraining (paper setting: 50 epochs, batch size 24)
 
+During training, `--country_test` specifies the country evaluated at each epoch, and the best checkpoint is tracked by its Top1. The paper runs used `Croatia (Croatian)`.
+
 ```bash
 torchrun --nproc_per_node=8 train_prosign_pretrain.py \
   --country_train "${TRAIN_COUNTRIES[@]}" \
-  --country_test "${TEST_COUNTRIES[@]}" \
+  --country_test "Croatia (Croatian)" \
   --batch-size 24 \
   --epochs 50 \
+  --config configs/prosign.yaml \
   --output_dir outputs/prosign_pretrain_benchmark
 ```
 
 ### 2. Zero-shot recognition evaluation (Table 2)
 
+Evaluate each unseen country in turn:
+
 ```bash
-python train_prosign_pretrain.py \
-  --eval \
-  --country_train "${TRAIN_COUNTRIES[@]}" \
-  --country_test "${TEST_COUNTRIES[@]}" \
-  --resume outputs/prosign_pretrain_benchmark/best_checkpoint.pth \
-  --output_dir outputs/prosign_pretrain_benchmark_eval
+for TC in "${TEST_COUNTRIES[@]}"; do
+  python train_prosign_pretrain.py \
+    --eval \
+    --country_train "${TRAIN_COUNTRIES[@]}" \
+    --country_test "$TC" \
+    --resume outputs/prosign_pretrain_benchmark/best_checkpoint.pth \
+    --config configs/prosign.yaml \
+    --output_dir outputs/prosign_pretrain_benchmark_eval
+done
 ```
 
-This reports `Top1`, `Top5`, and `Top10` for each unseen test country.
+Each run reports `Top1`, `Top5`, and `Top10` for that country and appends them to `<country>_test_log.txt` under the output directory.
 
 ### 3. Pronunciation generation training (paper setting: 30 epochs, batch size 2)
 
 ```bash
 torchrun --nproc_per_node=8 train_prosign_generation.py \
   --country_train "${TRAIN_COUNTRIES[@]}" \
-  --country_test "${TEST_COUNTRIES[@]}" \
+  --country_test "Croatia (Croatian)" \
   --batch-size 2 \
   --epochs 30 \
   --finetune outputs/prosign_pretrain_benchmark/best_checkpoint.pth \
+  --config configs/prosign.yaml \
   --output_dir outputs/prosign_generation_benchmark
 ```
 
 ### 4. Pronunciation generation evaluation (Table 3)
 
 ```bash
-python train_prosign_generation.py \
-  --eval \
-  --country_train "${TRAIN_COUNTRIES[@]}" \
-  --country_test "${TEST_COUNTRIES[@]}" \
-  --resume outputs/prosign_generation_benchmark/best_checkpoint.pth \
-  --output_dir outputs/prosign_generation_benchmark_eval
+for TC in "${TEST_COUNTRIES[@]}"; do
+  python train_prosign_generation.py \
+    --eval \
+    --country_train "${TRAIN_COUNTRIES[@]}" \
+    --country_test "$TC" \
+    --resume outputs/prosign_generation_benchmark/best_checkpoint.pth \
+    --config configs/prosign.yaml \
+    --output_dir outputs/prosign_generation_benchmark_eval
+done
 ```
 
-This reports `BLEU-4` and `ROUGE-1/2/L` for each unseen test country.
+Each run reports `BLEU-4` and `ROUGE-1/2/L` for that country.
 
 ## Inference
 

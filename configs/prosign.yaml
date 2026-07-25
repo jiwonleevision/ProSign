@@ -1,0 +1,6 @@
+# Minimal configuration for ProSign training and evaluation scripts.
+# The scripts read the wandb mode from training.wandb; all other
+# hyperparameters are provided via command-line arguments.
+
+training:
+  wandb: disabled
